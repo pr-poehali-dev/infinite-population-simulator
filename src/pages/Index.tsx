@@ -74,7 +74,7 @@ const PopulationSimulator = () => {
           
           // Расчет перенаселения
           const overpopulation = Math.max(1, prev / carryingCapacity);
-          setOverpopulationFactor(overpulation);
+          setOverpopulationFactor(overpopulation);
           
           // Базовые показатели с технологическими бонусами
           const techData = technologies[techLevel];
