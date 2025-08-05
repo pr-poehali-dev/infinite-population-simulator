@@ -23,7 +23,7 @@ const PopulationSimulator = () => {
   ];
 
   const generateRandomVariation = (base: number, variation: number = 0.3) => {
-    return base + (Math.random() - 0.5) * variation * 2;
+    return Math.max(0.1, base + (Math.random() - 0.5) * variation * 2);
   };
 
   useEffect(() => {
@@ -34,17 +34,32 @@ const PopulationSimulator = () => {
         setPopulation(prev => {
           if (prev <= 0) return 0;
           
-          const currentBirthRate = generateRandomVariation(birthRate, 0.5);
-          const currentDeathRate = generateRandomVariation(deathRate, 0.4);
+          // Ограничиваем вариации, чтобы не было резких скачков
+          const currentBirthRate = generateRandomVariation(birthRate, 0.2);
+          const currentDeathRate = generateRandomVariation(deathRate, 0.2);
           
           setBirthRate(currentBirthRate);
           setDeathRate(currentDeathRate);
           
+          // Более мягкий расчет роста
           const netGrowthRate = (currentBirthRate - currentDeathRate) / 100;
           const timeMultiplier = speedModes.find(mode => mode.id === speedMode)?.multiplier || 1;
-          const growthFactor = 1 + (netGrowthRate * timeMultiplier / 31536000); // per second
           
-          const newPopulation = Math.max(0, Math.round(prev * growthFactor));
+          // Ограничиваем максимальное изменение за итерацию
+          const maxChangePerSecond = 0.1; // Максимум 10% изменения за секунду
+          const rawGrowthFactor = netGrowthRate * timeMultiplier / 31536000;
+          const limitedGrowthFactor = Math.max(-maxChangePerSecond, Math.min(maxChangePerSecond, rawGrowthFactor));
+          
+          const growthFactor = 1 + limitedGrowthFactor;
+          
+          // Минимальный порог выживания
+          const newPopulation = Math.max(1, Math.round(prev * growthFactor));
+          
+          // Если население критически мало, добавляем стабилизацию
+          if (newPopulation < 10 && netGrowthRate < 0) {
+            return Math.max(1, prev - 1); // Медленное убывание вместо мгновенной смерти
+          }
+          
           return newPopulation;
         });
         
