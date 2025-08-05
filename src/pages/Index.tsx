@@ -10,6 +10,13 @@ const PopulationSimulator = () => {
   const [speedMode, setSpeedMode] = useState(1);
   const [isRunning, setIsRunning] = useState(false);
   const [totalTime, setTotalTime] = useState(0);
+  
+  // Новые системы
+  const [techLevel, setTechLevel] = useState(0);
+  const [currentTech, setCurrentTech] = useState('Каменные орудия');
+  const [warsCount, setWarsCount] = useState(0);
+  const [overpopulationFactor, setOverpopulationFactor] = useState(1);
+  const [carryingCapacity, setCarryingCapacity] = useState(1000);
 
   const speedModes = [
     { id: 1, label: 'Реальное время', multiplier: 1, unit: 'сек' },
@@ -20,6 +27,22 @@ const PopulationSimulator = () => {
     { id: 6, label: '100 лет/сек', multiplier: 3153600000, unit: 'век' },
     { id: 7, label: '1000 лет/сек', multiplier: 31536000000, unit: 'тыс.л' },
     { id: 8, label: '10000 лет/сек', multiplier: 315360000000, unit: '10тыс.л' }
+  ];
+
+  // Система технологий
+  const technologies = [
+    { name: 'Каменные орудия', level: 0, birthBonus: 0, deathReduction: 0, capacity: 1000 },
+    { name: 'Сельское хозяйство', level: 1, birthBonus: 0.3, deathReduction: 0.2, capacity: 5000 },
+    { name: 'Письменность', level: 2, birthBonus: 0.2, deathReduction: 0.3, capacity: 10000 },
+    { name: 'Металлургия', level: 3, birthBonus: 0.4, deathReduction: 0.1, capacity: 25000 },
+    { name: 'Медицина', level: 4, birthBonus: 0.1, deathReduction: 0.5, capacity: 50000 },
+    { name: 'Промышленность', level: 5, birthBonus: 0.5, deathReduction: 0.2, capacity: 500000 },
+    { name: 'Электричество', level: 6, birthBonus: 0.3, deathReduction: 0.4, capacity: 1000000 },
+    { name: 'Антибиотики', level: 7, birthBonus: 0.2, deathReduction: 0.6, capacity: 2000000 },
+    { name: 'Компьютеры', level: 8, birthBonus: 0.4, deathReduction: 0.3, capacity: 5000000 },
+    { name: 'Космические технологии', level: 9, birthBonus: 0.6, deathReduction: 0.4, capacity: 10000000 },
+    { name: 'Генетика', level: 10, birthBonus: 0.3, deathReduction: 0.7, capacity: 50000000 },
+    { name: 'ИИ и роботика', level: 11, birthBonus: 0.5, deathReduction: 0.5, capacity: 100000000 },
   ];
 
   const generateRandomVariation = (base: number, variation: number = 0.3) => {
@@ -34,30 +57,61 @@ const PopulationSimulator = () => {
         setPopulation(prev => {
           if (prev <= 0) return 0;
           
-          // Ограничиваем вариации, чтобы не было резких скачков
-          const currentBirthRate = generateRandomVariation(birthRate, 0.2);
-          const currentDeathRate = generateRandomVariation(deathRate, 0.2);
+          // Развитие технологий со временем
+          const years = totalTime / 31536000;
+          let newTechLevel = Math.floor(years / 500); // Новая технология каждые 500 лет
+          if (newTechLevel >= technologies.length) newTechLevel = technologies.length - 1;
+          
+          if (newTechLevel !== techLevel) {
+            setTechLevel(newTechLevel);
+            setCurrentTech(technologies[newTechLevel].name);
+            setCarryingCapacity(technologies[newTechLevel].capacity);
+          }
+          
+          // Генерация войн
+          const currentWars = Math.floor(Math.random() * 5) + Math.floor(prev / 10000); // Больше войн при большем населении
+          setWarsCount(currentWars);
+          
+          // Расчет перенаселения
+          const overpopulation = Math.max(1, prev / carryingCapacity);
+          setOverpopulationFactor(overpulation);
+          
+          // Базовые показатели с технологическими бонусами
+          const techData = technologies[techLevel];
+          let baseBirthRate = 2.1 + techData.birthBonus;
+          let baseDeathRate = 1.8 - techData.deathReduction;
+          
+          // Влияние войн на смертность
+          const warMortality = currentWars * 0.5; // Каждая война добавляет 0.5% смертности
+          baseDeathRate += warMortality;
+          
+          // Влияние перенаселения
+          if (overpopulation > 1) {
+            const overpopulationStress = Math.pow(overpopulation - 1, 1.5) * 2;
+            baseDeathRate += overpopulationStress;
+            baseBirthRate -= overpopulationStress * 0.3; // Снижение рождаемости при перенаселении
+          }
+          
+          // Случайные вариации
+          const currentBirthRate = generateRandomVariation(baseBirthRate, 0.2);
+          const currentDeathRate = generateRandomVariation(baseDeathRate, 0.2);
           
           setBirthRate(currentBirthRate);
           setDeathRate(currentDeathRate);
           
-          // Более мягкий расчет роста
+          // Расчет роста
           const netGrowthRate = (currentBirthRate - currentDeathRate) / 100;
           const timeMultiplier = speedModes.find(mode => mode.id === speedMode)?.multiplier || 1;
           
-          // Ограничиваем максимальное изменение за итерацию
-          const maxChangePerSecond = 0.1; // Максимум 10% изменения за секунду
+          const maxChangePerSecond = 0.1;
           const rawGrowthFactor = netGrowthRate * timeMultiplier / 31536000;
           const limitedGrowthFactor = Math.max(-maxChangePerSecond, Math.min(maxChangePerSecond, rawGrowthFactor));
           
           const growthFactor = 1 + limitedGrowthFactor;
-          
-          // Минимальный порог выживания
           const newPopulation = Math.max(1, Math.round(prev * growthFactor));
           
-          // Если население критически мало, добавляем стабилизацию
           if (newPopulation < 10 && netGrowthRate < 0) {
-            return Math.max(1, prev - 1); // Медленное убывание вместо мгновенной смерти
+            return Math.max(1, prev - 1);
           }
           
           return newPopulation;
@@ -68,7 +122,7 @@ const PopulationSimulator = () => {
     }
 
     return () => clearInterval(interval);
-  }, [isRunning, speedMode, birthRate, deathRate]);
+  }, [isRunning, speedMode, birthRate, deathRate, techLevel, totalTime, carryingCapacity]);
 
   const formatTime = (seconds: number) => {
     const years = Math.floor(seconds / 31536000);
@@ -96,6 +150,11 @@ const PopulationSimulator = () => {
     setDeathRate(1.8);
     setTotalTime(0);
     setIsRunning(false);
+    setTechLevel(0);
+    setCurrentTech('Каменные орудия');
+    setWarsCount(0);
+    setOverpopulationFactor(1);
+    setCarryingCapacity(1000);
   };
 
   const netGrowth = birthRate - deathRate;
@@ -129,6 +188,43 @@ const PopulationSimulator = () => {
               <span className="text-[10px] leading-tight">{mode.label}</span>
             </Button>
           ))}
+        </div>
+
+        {/* Technology & Wars Display */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <Card className="bg-gradient-to-br from-purple-900/50 to-indigo-800/30 border-purple-600/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-purple-300 text-lg flex items-center gap-2">
+                <Icon name="Cpu" size={20} />
+                Технологии
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-purple-200 font-mono mb-1">
+                {currentTech}
+              </div>
+              <div className="text-purple-400 text-sm">
+                Уровень {techLevel} • Вместимость: {formatPopulation(carryingCapacity)}
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-orange-900/50 to-red-800/30 border-orange-600/30">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-orange-300 text-lg flex items-center gap-2">
+                <Icon name="Swords" size={20} />
+                Конфликты
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-200 font-mono mb-1">
+                {warsCount} {warsCount === 1 ? 'война' : warsCount < 5 ? 'войны' : 'войн'}
+              </div>
+              <div className="text-orange-400 text-sm">
+                +{(warsCount * 0.5).toFixed(1)}% к смертности
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* Main Display */}
@@ -169,6 +265,11 @@ const PopulationSimulator = () => {
               }`}>
                 {netGrowth > 0 ? '↗ Рост' : netGrowth < 0 ? '↘ Убыль' : '→ Стабильность'}: {netGrowth.toFixed(2)}%
               </div>
+              {overpopulationFactor > 1.5 && (
+                <div className="text-red-300 text-xs mt-1 animate-pulse">
+                  ⚠️ Перенаселение: {overpopulationFactor.toFixed(1)}x
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -216,7 +317,7 @@ const PopulationSimulator = () => {
         </div>
 
         {/* Statistics Bar */}
-        <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="mt-8 grid grid-cols-1 sm:grid-cols-4 gap-4">
           <Card className="bg-slate-800/50 border-slate-600/30">
             <CardContent className="p-4 text-center">
               <div className="text-slate-400 text-sm mb-1">Текущая скорость</div>
@@ -237,12 +338,22 @@ const PopulationSimulator = () => {
           
           <Card className="bg-slate-800/50 border-slate-600/30">
             <CardContent className="p-4 text-center">
-              <div className="text-slate-400 text-sm mb-1">Тренд роста</div>
+              <div className="text-slate-400 text-sm mb-1">Прогресс цивилизации</div>
+              <div className="text-cyan-400 font-mono text-sm">
+                {((techLevel / (technologies.length - 1)) * 100).toFixed(0)}%
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card className="bg-slate-800/50 border-slate-600/30">
+            <CardContent className="p-4 text-center">
+              <div className="text-slate-400 text-sm mb-1">Состояние планеты</div>
               <div className={`font-mono text-lg ${
-                netGrowth > 0.5 ? 'text-green-400' : 
-                netGrowth < -0.5 ? 'text-red-400' : 'text-yellow-400'
+                overpopulationFactor > 2 ? 'text-red-400' : 
+                overpopulationFactor > 1.5 ? 'text-yellow-400' : 'text-green-400'
               }`}>
-                {netGrowth > 0.5 ? '📈 РОСТ' : netGrowth < -0.5 ? '📉 СПАД' : '📊 СТАБИЛЬНО'}
+                {overpopulationFactor > 2 ? '🔴 КРИЗИС' : 
+                 overpopulationFactor > 1.5 ? '🟡 СТРЕСС' : '🟢 НОРМА'}
               </div>
             </CardContent>
           </Card>
